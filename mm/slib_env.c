@@ -53,13 +53,13 @@ static int memblock_add_def(phys_addr_t base, phys_addr_t end)
 
 void *kmap_atomic(struct page *page)
 {
-	printk("%s:%d\n", __func__, __LINE__);
+	//printk("%s:%d\n", __func__, __LINE__);
 	return (void *)total_ram + (page_to_pfn(page) << PAGE_SHIFT);
 }
 
 void __kunmap_atomic(void *kvaddr)
 {
-	printk("%s:%d\n", __func__, __LINE__);
+	//printk("%s:%d\n", __func__, __LINE__);
 }
 
 #ifdef CONFIG_HIGHMEM
@@ -179,10 +179,10 @@ void __init setup_arch(char **cmd)
 	if (total_ram == NULL)
 		printk("Alloc memory failed in %s\n", __func__);
 
-	memblock_reserve_def(0x00000000200000, 0x00000000a44000);
+	memblock_reserve_def(0x00000000200000, 0x00000000a63000);
 	memblock_reserve_def(0x0000003ff74000, 0x0000003fff0000);
 	memblock_reserve_def(0x0000000009f000, 0x00000000100000);
-	memblock_reserve_def(0x00000000a44000, 0x00000000a4803d);
+	memblock_reserve_def(0x00000000a63000, 0x00000000a6703d);
 
 	memblock.current_limit = 0x1000000;
 	memblock_allow_resize();
@@ -233,7 +233,7 @@ void __init init_memory_system(void)
 #ifdef CONFIG_PRINT_BUDDY_FREELIST
 	print_buddy_freelist();
 #endif
-
+	init_per_zone_wmark_min();
 }
 
 void test(void)
@@ -257,3 +257,219 @@ void test(void)
 	printk("%s:Hello World\n", __FILE__);
 }
 
+static int per_cpu_pageset_done = 0;
+
+static int kern_trace_parse_alloc(unsigned long order_ul, unsigned long mt_ul,
+		char *gfp_masks, unsigned long pfn_ul, unsigned long *allocated_pfn)
+{
+	struct zonelist *zonelist;
+	struct page *pg;
+	gfp_t gfp_mask_ul = 0;
+
+	if (strstr(gfp_masks, "GFP_TRANSHUGE")) {
+		gfp_mask_ul |= GFP_TRANSHUGE;
+	}
+
+	if (strstr(gfp_masks, "GFP_HIGHUSER_MOVABLE")) {
+		gfp_mask_ul |= GFP_HIGHUSER_MOVABLE;
+	}
+
+	if (strstr(gfp_masks, "GFP_HIGHUSER")) {
+		gfp_mask_ul |= GFP_HIGHUSER;
+	}
+
+	if (strstr(gfp_masks, "GFP_USER")) {
+		gfp_mask_ul |= GFP_USER;
+	}
+
+	if (strstr(gfp_masks, "GFP_TEMPORARY")) {
+		gfp_mask_ul |= GFP_USER;
+	}
+
+	if (strstr(gfp_masks, "GFP_KERNEL")) {
+		gfp_mask_ul |= GFP_KERNEL;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOFS")) {
+		gfp_mask_ul |= GFP_NOFS;
+	}
+
+	if (strstr(gfp_masks, "GFP_ATOMIC")) {
+		gfp_mask_ul |= GFP_ATOMIC;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOIO")) {
+		gfp_mask_ul |= GFP_NOIO;
+	}
+
+	if (strstr(gfp_masks, "GFP_HIGH")) {
+		gfp_mask_ul |= __GFP_HIGH;
+	}
+
+	if (strstr(gfp_masks, "GFP_WAIT")) {
+		gfp_mask_ul |= __GFP_WAIT;
+	}
+
+	if (strstr(gfp_masks, "GFP_IO")) {
+		gfp_mask_ul |= __GFP_IO;
+	}
+
+	if (strstr(gfp_masks, "GFP_COLD")) {
+		gfp_mask_ul |= __GFP_COLD;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOWARN")) {
+		gfp_mask_ul |= __GFP_NOWARN;
+	}
+
+	if (strstr(gfp_masks, "GFP_REPEAT")) {
+		gfp_mask_ul |= __GFP_REPEAT;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOFAIL")) {
+		gfp_mask_ul |= __GFP_NOFAIL;
+	}
+
+	if (strstr(gfp_masks, "GFP_NORETRY")) {
+		gfp_mask_ul |= __GFP_NORETRY;
+	}
+
+	if (strstr(gfp_masks, "GFP_COMP")) {
+		gfp_mask_ul |= __GFP_COMP;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOMEMALLOC")) {
+		gfp_mask_ul |= __GFP_NOMEMALLOC;
+	}
+
+	if (strstr(gfp_masks, "GFP_HARDWALL")) {
+		gfp_mask_ul |= __GFP_HARDWALL;
+	}
+
+	if (strstr(gfp_masks, "GFP_THISNODE")) {
+		gfp_mask_ul |= __GFP_THISNODE;
+	}
+
+	if (strstr(gfp_masks, "GFP_RECLAIMABLE")) {
+		gfp_mask_ul |= __GFP_RECLAIMABLE;
+	}
+
+	if (strstr(gfp_masks, "GFP_MOVABLE")) {
+		gfp_mask_ul |= __GFP_MOVABLE;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOTRACK")) {
+		gfp_mask_ul |= __GFP_NOTRACK;
+	}
+
+	if (strstr(gfp_masks, "GFP_NO_KSWAPD")) {
+		gfp_mask_ul |= __GFP_NO_KSWAPD;
+	}
+
+	if (strstr(gfp_masks, "GFP_OTHER_NODE")) {
+		gfp_mask_ul |= __GFP_OTHER_NODE;
+	}
+
+	if (strstr(gfp_masks, "GFP_NOWAIT")) {
+		gfp_mask_ul |= GFP_NOWAIT;
+	}
+
+	if (strstr(gfp_masks, "0x2")) {
+		gfp_mask_ul |= 0x2;
+	}
+
+	if (strstr(gfp_masks, "0x1000002")) {
+		gfp_mask_ul |= 0x1000002;
+	}
+
+	if (strstr(gfp_masks, "GFP_ZERO")) {
+		gfp_mask_ul |= __GFP_ZERO;
+	}
+
+	zonelist = NODE_DATA(0)->node_zonelists + 0;
+	pg = __alloc_pages_nodemask(gfp_mask_ul, order_ul, zonelist, NULL);
+
+out:
+	if (pg == NULL)
+		printk("Error\n");
+
+	*allocated_pfn = page_to_pfn(pg);
+	printk("alloc: %lu trace: %lu, %s\n", *allocated_pfn, pfn_ul,
+			page_to_pfn(pg) == pfn_ul ? "True" : "False");
+#if 0
+	if (page_to_pfn(pg) != pfn_ul) {
+		print_buddy_freelist();
+		print_zone_pageset();
+		return -1;
+	}
+#endif
+	if (!per_cpu_pageset_done && order_ul == 3) {
+		setup_per_cpu_pageset();
+		per_cpu_pageset_done = 1;
+	}
+	return 0;
+}
+
+int kern_trace_parse_alloc_one(char *order, char *mt, char *gfp_masks, char *pfn,
+	unsigned long *allocated_pfn)
+{
+	unsigned long order_ul;
+	unsigned long mt_ul;
+	unsigned long pfn_ul;
+
+	order[-1] = '\0';
+	kstrtoul(pfn + 4, 10, &pfn_ul);
+
+	mt[-1] = '\0';
+	kstrtoul(order + 6, 10, &order_ul);
+
+	gfp_masks[-1] = '\0';
+	kstrtoul(mt + 12, 10, &mt_ul);
+
+	if (order_ul == 0)
+		return kern_trace_parse_alloc(order_ul, mt_ul, gfp_masks, pfn_ul, allocated_pfn);
+
+	return 0;
+}
+
+int kern_trace_parse_alloc_lock(char *order, char *mt, char *gfp_masks, char *pfn,
+	unsigned long *allocated_pfn)
+{
+	unsigned long order_ul;
+	unsigned long mt_ul;
+	unsigned long pfn_ul;
+	int ret;
+
+	order[-1] = '\0';
+	kstrtoul(pfn + 4, 10, &pfn_ul);
+
+	mt[-1] = '\0';
+	kstrtoul(order + 6, 10, &order_ul);
+
+	kstrtoul(mt + 12, 10, &mt_ul);
+
+	ret = kern_trace_parse_alloc(order_ul, mt_ul, gfp_masks, pfn_ul, allocated_pfn);
+	return ret;
+}
+
+
+int kern_trace_parse_free(char *order, unsigned long pfn, int cold)
+{
+	unsigned long order_ul;
+	struct page *page;
+	
+	kstrtoul(order + 6, 10, &order_ul);
+	printk("free: order:%lu, pfn=%lu\n", order_ul, pfn);
+
+	page = pfn_to_page(pfn);
+
+	if (cold == 0)
+		__free_pages(page, order_ul);
+	else if (order_ul == 0)
+		free_hot_cold_page(page, cold);
+	else {
+		printk("For cold page, order is 0\n");
+		return -1;
+	}
+	return 0;
+}

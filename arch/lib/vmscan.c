@@ -8,7 +8,7 @@
 
 #include <linux/mm.h>
 #include <linux/shrinker.h>
-
+#if 0
 long vm_total_pages;
 
 /*
@@ -25,4 +25,4 @@ void register_shrinker(struct shrinker *shrinker)
 void unregister_shrinker(struct shrinker *shrinker)
 {
 }
-
+#endif

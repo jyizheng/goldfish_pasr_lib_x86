@@ -103,7 +103,7 @@ rwsem.o semaphore.o kfifo.o cred.o user.o groups.o ksysfs.o \
 srcu.o pdate.o tiny.o mutex.o kthread.o cpu.o rcupdate.o
 kernel/time/_to_keep=time.o
 mm/_to_keep=util.o slib.o slib_env.o page_alloc.o memblock.o nobootmem.o highmem.o \
-mmzone.o
+mmzone.o page-writeback.o vmscan.o
 crypto/_to_keep=aead.o ahash.o shash.o api.o algapi.o cipher.o compress.o proc.o \
 crc32c_generic.o
 drivers/base/_to_keep=class.o core.o bus.o dd.o driver.o devres.o module.o map.o

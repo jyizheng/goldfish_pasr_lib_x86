@@ -129,7 +129,6 @@ FORWARDER4(lib_sys_file_write, nvoid, int, const struct SimSysFile *,
 
 struct SimKernel *g_kernel;
 
-
 void lib_init(struct SimExported *exported, const struct SimImported *imported,
 	      struct SimKernel *kernel)
 {
@@ -173,6 +172,7 @@ void lib_init(struct SimExported *exported, const struct SimImported *imported,
 	pr_notice("%s", linux_banner);
 
 	init_memory_system();
+	imported->replay();
 
 	rcu_init();
 
@@ -199,6 +199,7 @@ void lib_init(struct SimExported *exported, const struct SimImported *imported,
 
 	/* finally, put the system in RUNNING state. */
 	system_state = SYSTEM_RUNNING;
+
 }
 
 int lib_vprintf(const char *str, va_list args)

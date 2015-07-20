@@ -185,11 +185,11 @@ config PRINT_BUDDY_FREELIST
 
 config DISABLE_PAGE_MOBILITY
 	bool
-	default y
+	default n
 
 config SORT_FREELIST
 	bool
-	default y
+	default n
 config HAVE_MEMBLOCK_NODE_MAP
 	bool
 	default y

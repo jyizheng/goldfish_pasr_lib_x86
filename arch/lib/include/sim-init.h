@@ -121,6 +121,7 @@ struct SimImported {
 	void (*signal_raised)(struct SimKernel *kernel, struct SimTask *task,
 			int sig);
 	void (*poll_event)(int flag, void *context);
+	int (*replay) (void);
 };
 
 typedef void (*SimInit)(struct SimExported *, const struct SimImported *,

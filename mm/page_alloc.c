@@ -93,23 +93,55 @@ void print_buddy_freelist(void)
 #ifndef CONFIG_LIB
 				printk(KERN_INFO "%lu %u %u %d\n", pfn, order, t, i);
 #else
-				printk(KERN_INFO "%lu %u %u %d\n", pfn, order, t, i);
+				printk(KERN_INFO "%lu %u %u %d\n", pfn +
+						(PAGE_OFFSET >> PAGE_SHIFT), order, t, i);
 #endif
 				i++;
 			}
 		}
 	}
-
 out:
-	{
-		page = alloc_pages(GFP_KERNEL, 4);
-		__free_pages(page, 4);
-	}
-
 	printk(KERN_INFO "Totoal free page: %d\n", i);
 }
-
 EXPORT_SYMBOL(print_buddy_freelist);
+
+void print_zone_pageset(void) {
+	unsigned int type;
+	struct zone *zone;
+	struct list_head *curr;
+	unsigned long pfn;
+	int i = 0;
+	struct page *pg;
+
+	for_each_zone(zone) {
+		printk(KERN_INFO "I am zone %s\n", zone->name);
+		//for (type = 0; type < MIGRATE_TYPES; type++) {
+		for (type = 2; type <= 2; type++) {
+			struct per_cpu_pages *pcp;
+			struct list_head *list;
+			pcp = &this_cpu_ptr(zone->pageset)->pcp;
+			list = &pcp->lists[type];
+			if (list_empty(list))
+				continue;
+
+			list_for_each(curr, list) {
+				pg = list_entry(curr, struct page, lru);
+				if (pg == NULL)
+					continue;
+				pfn = page_to_pfn(pg);
+#ifndef CONFIG_LIB
+				printk(KERN_INFO "%lu, %u, %d\n", pfn, type, i);
+#else
+				printk(KERN_INFO "%lu, %u, %d\n", pfn +
+						(PAGE_OFFSET >> PAGE_SHIFT), type, i);
+#endif
+				i++;
+			}
+		}
+	}
+	printk("\n");
+}
+EXPORT_SYMBOL(print_zone_pageset);
 #endif
 
 #ifdef CONFIG_PASR_HYPERCALL
@@ -157,6 +189,48 @@ static void hc_mm_page_alloc_extfrag(struct page *page,
 
 	kvm_hypercall4(KVM_HC_PASR_MM_PAGE_ALLOC_EXTFRAG, (unsigned long)page,
 			page ? page_to_pfn(page) : 0, packed1, packed2);
+}
+#else
+
+static void hc_mm_page_free(struct page *page, unsigned int order)
+{
+
+}
+
+static void  hc_mm_page_free_batched(struct page *page, int cold)
+{
+}
+
+static void hc_mm_page_alloc(struct page *page, unsigned int order,
+			gfp_t gfp_flags, int migratetype)
+{
+
+}
+
+static void hc_mm_page_alloc_zone_locked(struct page *page, unsigned int order,
+							int migratetype)
+{
+	printk("page=%p pfn=%lu order=%u migratetype=%d percpu_refill=%d\n",
+		page,
+		page ? page_to_pfn(page) : 0,
+		order,
+		migratetype,
+		order == 0);
+}
+
+static void hc_mm_page_pcpu_drain(struct page *page, unsigned int order,
+			int migratetype)
+{
+	printk("drain:page=%p pfn=%lu order=%d migratetype=%d\n",
+		page, page_to_pfn(page),
+		order, migratetype);
+}
+
+static void hc_mm_page_alloc_extfrag(struct page *page,
+			int alloc_order, int fallback_order,
+			int alloc_migratetype, int fallback_migratetype)
+{
+
 }
 
 #endif
@@ -338,7 +412,11 @@ int min_free_order_shift = 1;
  * free memory, to make space for new workloads. Anyone can allocate
  * down to the min watermarks controlled by min_free_kbytes above.
  */
+#ifndef CONFIG_LIB
 int extra_free_kbytes = 0;
+#else
+int extra_free_kbytes = 1215;
+#endif
 
 static unsigned long __meminitdata nr_kernel_pages;
 static unsigned long __meminitdata nr_all_pages;
@@ -807,6 +885,7 @@ static inline void free_page_mlock(struct page *page)
 
 static inline int free_pages_check(struct page *page)
 {
+#ifndef CONFIG_LIB
 	if (unlikely(page_mapcount(page) |
 		(page->mapping != NULL)  |
 		(atomic_read(&page->_count) != 0) |
@@ -815,6 +894,7 @@ static inline int free_pages_check(struct page *page)
 		bad_page(page);
 		return 1;
 	}
+#endif
 	if (page->flags & PAGE_FLAGS_CHECK_AT_PREP)
 		page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 	return 0;
@@ -873,18 +953,12 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 #ifndef CONFIG_DISABLE_PAGE_MOBILITY
 			__free_one_page(page, zone, 0, page_private(page));
 			trace_mm_page_pcpu_drain(page, 0, page_private(page));
-#ifdef CONFIG_PASR_HYPERCALL
 			hc_mm_page_pcpu_drain(page, 0, page_private(page));
-#endif
 
 #else
 			__free_one_page(page, zone, 0, MIGRATE_UNMOVABLE);
 			trace_mm_page_pcpu_drain(page, 0, MIGRATE_UNMOVABLE);
-
-#ifdef CONFIG_PASR_HYPERCALL
 			hc_mm_page_pcpu_drain(page, 0, MIGRATE_UNMOVABLE);
-#endif
-
 #endif
 
 
@@ -913,9 +987,7 @@ static bool free_pages_prepare(struct page *page, unsigned int order)
 
 	trace_mm_page_free(page, order);
 
-#ifdef CONFIG_PASR_HYPERCALL
 	hc_mm_page_free(page, order);
-#endif
 
 	kmemcheck_free_shadow(page, order);
 
@@ -1045,14 +1117,14 @@ static inline int check_new_page(struct page *page)
 
 static int prep_new_page(struct page *page, int order, gfp_t gfp_flags)
 {
+#ifndef CONFIG_LIB
 	int i;
-
 	for (i = 0; i < (1 << order); i++) {
 		struct page *p = page + i;
 		if (unlikely(check_new_page(p)))
 			return 1;
 	}
-
+#endif
 	set_page_private(page, 0);
 	set_page_refcounted(page);
 
@@ -1258,10 +1330,8 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
 
 			trace_mm_page_alloc_extfrag(page, order, current_order,
 				start_migratetype, migratetype);
-#ifdef CONFIG_PASR_HYPERCALL
 			hc_mm_page_alloc_extfrag(page, order, current_order,
 				start_migratetype, migratetype);
-#endif
 
 
 			return page;
@@ -1298,9 +1368,7 @@ retry_reserve:
 	}
 
 	trace_mm_page_alloc_zone_locked(page, order, migratetype);
-#ifdef CONFIG_PASR_HYPERCALL
 	hc_mm_page_alloc_zone_locked(page, order, migratetype);
-#endif
 	return page;
 }
 
@@ -1555,10 +1623,7 @@ void free_hot_cold_page_list(struct list_head *list, int cold)
 
 	list_for_each_entry_safe(page, next, list, lru) {
 		trace_mm_page_free_batched(page, cold);
-
-#ifdef CONFIG_PASR_HYPERCALL
 		hc_mm_page_free_batched(page, cold);
-#endif
 		free_hot_cold_page(page, cold);
 	}
 }
@@ -1656,6 +1721,9 @@ again:
 		struct list_head *list;
 
 		local_irq_save(flags);
+		//printk(KERN_INFO "preferred: %s, zone: %s\n",
+		//		preferred_zone->name,
+		//		zone->name);
 		pcp = &this_cpu_ptr(zone->pageset)->pcp;
 		list = &pcp->lists[migratetype];
 		if (list_empty(list)) {
@@ -1693,7 +1761,6 @@ again:
 		}
 		spin_lock_irqsave(&zone->lock, flags);
 		page = __rmqueue(zone, order, migratetype);
-
 		spin_unlock(&zone->lock);
 		if (!page)
 			goto failed;
@@ -1994,6 +2061,7 @@ static void zlc_clear_zones_full(struct zonelist *zonelist)
 }
 #endif	/* CONFIG_NUMA */
 
+
 /*
  * get_page_from_freelist goes through the zonelist trying to allocate
  * a page.
@@ -2061,6 +2129,7 @@ zonelist_scan:
 			int ret;
 
 			mark = zone->watermark[alloc_flags & ALLOC_WMARK_MASK];
+			//printk(KERN_INFO "zone_watermark_ok: false, mark:%lu\n", mark);
 			if (zone_watermark_ok(zone, order, mark,
 				    classzone_idx, alloc_flags))
 				goto try_this_zone;
@@ -2731,15 +2800,11 @@ retry_cpuset:
 				preferred_zone, migratetype);
 
 	trace_mm_page_alloc(page, order, gfp_mask, migratetype);
-
-#ifdef CONFIG_PASR_HYPERCALL
 	hc_mm_page_alloc(page, order, gfp_mask, migratetype);
-#endif
 
 #ifdef CONFIG_DEBUG_PAGE_ALLOC_ORDER
 	page_alloc_order[order]++;
 #endif
-
 
 out:
 	/*
@@ -2750,12 +2815,9 @@ out:
 	 */
 	if (unlikely(!put_mems_allowed(cpuset_mems_cookie) && !page))
 		goto retry_cpuset;
-
 #ifdef CONFIG_LIB
-        printk(KERN_INFO "Done: I am %s %lu\n", __func__, page_to_pfn(page));
         page->virtual = (void *)total_ram + (page_to_pfn(page) << PAGE_SHIFT);
 #endif
-
 	return page;
 }
 EXPORT_SYMBOL(__alloc_pages_nodemask);
@@ -2779,6 +2841,7 @@ unsigned long __get_free_pages(gfp_t gfp_mask, unsigned int order)
 #ifndef CONFIG_LIB
 	return (unsigned long) page_address(page);
 #else
+	printk("%s: pfn=%lu\n", __func__, page_to_pfn(page));
 	return (unsigned long) page->virtual;
 #endif
 }
@@ -2925,7 +2988,6 @@ static unsigned int nr_free_zone_pages(int offset)
 	return sum;
 }
 
-#ifndef CONFIG_LIB
 /*
  * Amount of free RAM allocatable within ZONE_DMA and ZONE_NORMAL
  */
@@ -2934,7 +2996,6 @@ unsigned int nr_free_buffer_pages(void)
 	return nr_free_zone_pages(gfp_zone(GFP_USER));
 }
 EXPORT_SYMBOL_GPL(nr_free_buffer_pages);
-#endif
 
 /*
  * Amount of free RAM allocatable within all zones
@@ -4062,6 +4123,7 @@ static void setup_pageset(struct per_cpu_pageset *p, unsigned long batch)
 	pcp = &p->pcp;
 	pcp->count = 0;
 	pcp->high = 6 * batch;
+	printk("%s: pcp->high: %d\n", __func__, pcp->high);
 	pcp->batch = max(1UL, 1 * batch);
 	for (migratetype = 0; migratetype < MIGRATE_PCPTYPES; migratetype++)
 		INIT_LIST_HEAD(&pcp->lists[migratetype]);
@@ -4079,6 +4141,7 @@ static void setup_pagelist_highmark(struct per_cpu_pageset *p,
 
 	pcp = &p->pcp;
 	pcp->high = high;
+	printk("%s: pcp->high: %d\n", __func__, pcp->high);
 	pcp->batch = max(1UL, high/4);
 	if ((high/4) > (PAGE_SHIFT * 8))
 		pcp->batch = PAGE_SHIFT * 8;
@@ -5311,6 +5374,9 @@ void setup_per_zone_wmarks(void)
 	struct zone *zone;
 	unsigned long flags;
 
+	printk(KERN_INFO "min_free_kbytes:%d, extra_free_kbytes:%d\n",
+		                min_free_kbytes, extra_free_kbytes);
+
 	/* Calculate total number of !ZONE_HIGHMEM pages */
 	for_each_zone(zone) {
 		if (!is_highmem(zone))
@@ -5436,7 +5502,6 @@ int __meminit init_per_zone_wmark_min(void)
 	unsigned long lowmem_kbytes;
 
 	lowmem_kbytes = nr_free_buffer_pages() * (PAGE_SIZE >> 10);
-
 	min_free_kbytes = int_sqrt(lowmem_kbytes * 16);
 	if (min_free_kbytes < 128)
 		min_free_kbytes = 128;
